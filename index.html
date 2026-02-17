@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Радар ПФО - Сеть Мониторинга БПЛА</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+
+  /* Скрываем стандартный курсор для всей страницы */
+body {
+    cursor: none;
+}
+
+/* Точка в центре */
+.radar-dot {
+    width: 6px;
+    height: 6px;
+    background: #00ff00;
+    box-shadow: 0 0 10px #00ff00;
+    border-radius: 50%;
+    position: fixed;
+    pointer-events: none;
+    z-index: 10000;
+    transform: translate(-50%, -50%);
+}
+
+/* Кольцо радара */
+.radar-cursor {
+    width: 40px;
+    height: 40px;
+    border: 2px solid rgba(0, 255, 0, 0.5);
+    border-radius: 50%;
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: width 0.2s, height 0.2s;
+}
+
+/* Пульсирующий эффект сканирования */
+.radar-cursor::after {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 1px solid #00ff00;
+    animation: radar-pulse 1.5s infinite linear;
+}
+
+@keyframes radar-pulse {
+    0% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* Эффект при наведении на кликабельные элементы */
+.cursor-active {
+    width: 60px !important;
+    height: 60px !important;
+    border-color: #ff0000 !important;
+}
+
+
+    .card {
+    position: relative;
+    z-index: 1000; /* Поднимает карточку над всеми эффектами */
+    pointer-events: all !important; /* Разрешает клики */
+    cursor: pointer; /* Делает курсор "пальцем" */
+}
+
+    * {
+    -webkit-tap-highlight-color: transparent !important;
+    outline: none !important;
+    touch-action: manipulation;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg-deep:#0a1628;--accent-blue:#00d4ff;--accent-cyan:#00ffc8;
+  --accent-green:#39ff14;--accent-orange:#ff6b35;--accent-red:#ff3b30;
+  --accent-yellow:#ffcc00;
+  --glass-bg:rgba(255,255,255,0.05);
+  --glass-bg2:rgba(255,255,255,0.08);
+  --glass-border:rgba(255,255,255,0.1);
+  --glass-hover:rgba(255,255,255,0.1);
+  --text-primary:#ffffff;--text-secondary:rgba(255,255,255,0.6);
+  --text-muted:rgba(255,255,255,0.35)
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg-deep);color:var(--text-primary);min-height:100vh;overflow-x:hidden}
+
+/* SKY */
+.sky{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;
+background:linear-gradient(180deg,#0a1a3a 0%,#0d2654 8%,#12305e 15%,#1a4278 25%,#1e5a8a 35%,#1a6b9c 45%,#2180a8 55%,#1a6b9c 65%,#14507a 75%,#0d2f5c 88%,#081a3a 100%)}
+
+/* CLOUDS */
+.clouds-layer{position:fixed;top:0;left:0;width:200%;height:100%;z-index:1;pointer-events:none}
+.cloud-puff{position:absolute;background:radial-gradient(ellipse,rgba(255,255,255,0.08) 0%,rgba(255,255,255,0.02) 50%,transparent 70%);border-radius:50%}
+.cloud-puff.dense{background:radial-gradient(ellipse,rgba(200,220,255,0.12) 0%,rgba(200,220,255,0.04) 40%,transparent 70%)}
+@keyframes cloudGroupDrift{0%{transform:translateX(-400px)}100%{transform:translateX(calc(100vw + 400px))}}
+
+.bg-grid{position:fixed;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none;
+background-image:linear-gradient(rgba(0,212,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.02) 1px,transparent 1px);background-size:60px 60px}
+.scanline{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:3;
+background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.008) 3px,rgba(0,0,0,0.008) 6px)}
+.scan-beam{position:fixed;left:0;width:100%;height:6px;background:linear-gradient(180deg,transparent,rgba(0,212,255,0.025),transparent);z-index:3;pointer-events:none;animation:scanBeam 10s linear infinite}
+@keyframes scanBeam{0%{top:-10px}100%{top:100vh}}
+
+.radar-container{position:fixed;z-index:2;pointer-events:none}
+.radar-top-left{top:-150px;left:-150px}
+.radar-circle{position:absolute;border-radius:50%;border:1px solid rgba(0,212,255,0.05);top:50%;left:50%;transform:translate(-50%,-50%)}
+.radar-circle.r1{width:300px;height:300px}.radar-circle.r2{width:500px;height:500px}.radar-circle.r3{width:700px;height:700px}
+.radar-sweep{position:absolute;width:350px;height:350px;top:50%;left:50%;transform:translate(-50%,-50%);animation:radarSweep 5s linear infinite}
+.radar-sweep::before{content:'';position:absolute;top:50%;left:50%;width:50%;height:2px;background:linear-gradient(90deg,rgba(0,212,255,0.4),transparent);transform-origin:left center;transform:translateY(-50%)}
+@keyframes radarSweep{from{transform:translate(-50%,-50%) rotate(0deg)}to{transform:translate(-50%,-50%) rotate(360deg)}}
+
+.ripple{position:fixed;border-radius:50%;border:1px solid rgba(0,212,255,0.1);animation:rippleExpand 4s ease-out infinite;pointer-events:none;z-index:2;width:20px;height:20px}
+.ripple-1{top:8%;left:12%;animation-delay:0s}.ripple-2{top:8%;left:12%;animation-delay:1.3s}
+.ripple-3{bottom:12%;right:8%;animation-delay:.5s}.ripple-4{bottom:12%;right:8%;animation-delay:1.8s}
+@keyframes rippleExpand{0%{transform:scale(1);opacity:.5}100%{transform:scale(25);opacity:0}}
+
+.stars{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none}
+.star{position:absolute;width:2px;height:2px;background:white;border-radius:50%;animation:twinkle 3s ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:.05}50%{opacity:.35}}
+
+.drones-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:4;pointer-events:none}
+
+/* TIME */
+.time-display{position:fixed;top:20px;right:20px;z-index:20;
+  background:rgba(18,30,60,0.6);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:10px 18px;
+  font-size:18px;font-weight:700;color:var(--accent-blue);font-variant-numeric:tabular-nums;letter-spacing:2px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);
+  animation:fadeInDown 1s ease-out .2s backwards}
+.time-label{font-size:9px;color:var(--text-muted);font-weight:400;letter-spacing:1px;text-transform:uppercase;display:block;margin-top:2px}
+
+/* MINI RADAR */
+.mini-radar{position:fixed;bottom:20px;left:20px;z-index:20;width:90px;height:90px;
+  background:rgba(0,0,0,0.4);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(0,212,255,0.12);border-radius:50%;overflow:hidden;
+  box-shadow:0 4px 20px rgba(0,0,0,0.4);animation:fadeInDown 1s ease-out .4s backwards}
+.mini-radar-sweep{position:absolute;width:100%;height:100%;animation:radarSweep 3s linear infinite}
+.mini-radar-sweep::before{content:'';position:absolute;top:50%;left:50%;width:50%;height:1px;background:linear-gradient(90deg,rgba(0,212,255,0.7),transparent);transform-origin:left center}
+.mini-radar-grid{position:absolute;inset:0;
+  background-image:radial-gradient(circle,transparent 18px,rgba(0,212,255,0.05) 18px,rgba(0,212,255,0.05) 19px,transparent 19px),
+  radial-gradient(circle,transparent 34px,rgba(0,212,255,0.04) 34px,rgba(0,212,255,0.04) 35px,transparent 35px);background-position:center}
+.mini-radar-center{position:absolute;top:50%;left:50%;width:4px;height:4px;margin:-2px;background:var(--accent-green);border-radius:50%;box-shadow:0 0 8px var(--accent-green)}
+.mini-radar canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+
+.scroll-indicator{position:fixed;top:0;left:0;height:3px;z-index:100;background:linear-gradient(90deg,var(--accent-blue),var(--accent-cyan));box-shadow:0 0 10px var(--accent-blue)}
+
+.content{position:relative;z-index:10;max-width:1200px;margin:0 auto;padding:40px 20px 60px}
+
+/* NAV - GLASSMORPHISM */
+.nav-top{position:fixed;top:0;left:0;right:0;z-index:50;
+  background:rgba(10,22,40,0.6);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border-bottom:1px solid rgba(255,255,255,0.06);padding:0 20px;
+  transform:translateY(-100%);transition:transform .3s;
+  box-shadow:0 4px 30px rgba(0,0,0,0.2)}
+.nav-top.visible{transform:translateY(0)}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+.nav-logo{font-size:14px;font-weight:800;color:var(--accent-blue);letter-spacing:1px}
+.nav-links{display:flex;gap:20px}
+.nav-links a{font-size:12px;color:var(--text-secondary);text-decoration:none;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--accent-blue)}
+
+/* FADE SECTIONS */
+.fade-section{opacity:0;transform:translateY(50px);transition:opacity .9s cubic-bezier(.16,1,.3,1),transform .9s cubic-bezier(.16,1,.3,1)}
+.fade-section.visible{opacity:1;transform:translateY(0)}
+
+/* HEADER */
+.header{text-align:center;margin-bottom:50px;animation:fadeInDown 1s ease-out;padding-top:20px}
+.header-badge{display:inline-flex;align-items:center;gap:8px;
+  background:rgba(0,212,255,0.06);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(0,212,255,0.15);border-radius:100px;padding:8px 20px;font-size:11px;
+  font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--accent-blue);margin-bottom:24px;
+  box-shadow:0 4px 20px rgba(0,212,255,0.1)}
+.badge-dot{width:8px;height:8px;background:var(--accent-green);border-radius:50%;animation:pulse 2s ease-in-out infinite;box-shadow:0 0 10px var(--accent-green)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.header h1 {
+  background: linear-gradient(135deg, #fff 0%, #00d4ff 50%, #00ffc8 100%);
+  background-size: 200% 200%;
+  
+  /* Сначала вендорный префикс для Chrome/Safari */
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  
+  /* Затем стандартное свойство для совместимости */
+  background-clip: text;
+  
+  animation: gradientShift 4s ease-in-out infinite;
+}
+.header h1 .radar-word{display:block;font-size:clamp(42px,9vw,90px);letter-spacing:8px}
+.header-subtitle{font-size:clamp(14px,2.5vw,18px);color:var(--text-secondary);font-weight:300;letter-spacing:1px;margin-top:12px}
+.header-desc{font-size:14px;color:var(--text-muted);font-weight:300;max-width:600px;margin:16px auto 0;line-height:1.7}
+.header-line{width:80px;height:2px;background:linear-gradient(90deg,transparent,var(--accent-blue),transparent);margin:24px auto 0}
+.status-bar{display:flex;justify-content:center;gap:30px;margin-top:28px;flex-wrap:wrap}
+.status-item{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)}
+.status-item .dot{width:6px;height:6px;border-radius:50%;animation:pulse 2s ease-in-out infinite}
+.dot-green{background:var(--accent-green);box-shadow:0 0 8px var(--accent-green)}
+.dot-blue{background:var(--accent-blue);box-shadow:0 0 8px var(--accent-blue)}
+.dot-orange{background:#ff9500;box-shadow:0 0 8px #ff9500;animation-delay:.5s}
+
+.section-title{text-align:center;margin:50px 0 24px}
+.section-title h2{font-size:clamp(20px,4vw,28px);font-weight:800;letter-spacing:-.5px;margin-bottom:8px}
+.section-title p{font-size:14px;color:var(--text-secondary);font-weight:300;max-width:500px;margin:0 auto}
+.section-title .title-line{width:40px;height:2px;margin:14px auto 0;background:linear-gradient(90deg,transparent,var(--accent-blue),transparent)}
+
+/* ===== MAX MESSENGER BLOCK - VERTICAL WITH 3D PHONE ===== */
+.max-block{
+  background:rgba(255,255,255,0.03);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(0,150,255,0.15);border-radius:24px;padding:40px;margin:30px 0;
+  display:flex;align-items:center;gap:40px;overflow:hidden;position:relative;
+  box-shadow:0 8px 40px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06)}
+.max-block::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent)}
+.max-text{flex:1;min-width:0}
+.max-badge{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(0,150,255,0.1);border:1px solid rgba(0,150,255,0.2);
+  border-radius:100px;padding:5px 14px;font-size:10px;font-weight:700;
+  color:#00aaff;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+.max-text h3{font-size:22px;font-weight:800;margin-bottom:10px;line-height:1.3}
+.max-text p{font-size:13px;color:var(--text-secondary);font-weight:300;line-height:1.7;margin-bottom:16px}
+.max-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:14px;
+  font-size:14px;font-weight:600;text-decoration:none;
+  background:linear-gradient(135deg,#0077ff,#00aaff);color:#fff;transition:all .3s;
+  box-shadow:0 4px 20px rgba(0,119,255,0.3)}
+.max-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,119,255,0.4)}
+
+/* 3D PHONE */
+.phone-3d{flex-shrink:0;width:200px;height:380px;position:relative;perspective:1000px}
+.phone-body{
+  width:180px;height:360px;position:absolute;top:10px;left:10px;
+  background:linear-gradient(145deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
+  border-radius:30px;border:2px solid rgba(255,255,255,0.1);
+  transform:rotateY(-15deg) rotateX(3deg) rotateZ(2deg);
+  transform-style:preserve-3d;
+  box-shadow:
+    20px 20px 60px rgba(0,0,0,0.5),
+    -5px -5px 20px rgba(0,100,255,0.05),
+    inset 0 1px 0 rgba(255,255,255,0.1),
+    inset 0 -1px 0 rgba(0,0,0,0.3);
+}
+.phone-screen{
+  position:absolute;top:12px;left:8px;right:8px;bottom:12px;
+  background:linear-gradient(180deg,#0a1628,#0d1f3c);
+  border-radius:22px;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  box-shadow:inset 0 0 30px rgba(0,0,0,0.5);
+}
+.phone-notch{position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:80px;height:20px;background:#0a0a0a;border-radius:0 0 14px 14px;z-index:2}
+.phone-max-icon{width:60px;height:60px;border-radius:16px;object-fit:cover;
+  box-shadow:0 4px 15px rgba(0,0,0,0.4)}
+.phone-max-text{font-size:11px;color:var(--text-secondary);font-weight:500;text-align:center}
+.phone-max-name{font-size:14px;font-weight:700;color:#fff;margin-top:2px}
+.phone-btn{background:linear-gradient(135deg,#0077ff,#00aaff);border-radius:10px;padding:8px 20px;
+  font-size:10px;font-weight:600;color:white;margin-top:4px}
+.phone-side{position:absolute;top:80px;right:-3px;width:3px;height:40px;
+  background:linear-gradient(180deg,rgba(255,255,255,0.15),rgba(255,255,255,0.05));
+  border-radius:0 2px 2px 0}
+.phone-side2{position:absolute;top:140px;right:-3px;width:3px;height:30px;
+  background:linear-gradient(180deg,rgba(255,255,255,0.15),rgba(255,255,255,0.05));
+  border-radius:0 2px 2px 0}
+
+@media(max-width:768px){
+  .max-block{flex-direction:column;padding:28px;gap:24px;text-align:center}
+  .phone-3d{width:160px;height:300px}
+  .phone-body{width:140px;height:280px;transform:rotateY(-10deg) rotateX(2deg)}
+  .phone-max-icon{width:45px;height:45px}
+}
+
+/* CARDS GRID */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px}
+
+/* GLASS CARD - APPLE STYLE */
+.card{position:relative;
+  background:rgba(255,255,255,0.03);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:20px;cursor:pointer;
+  transition:all .4s cubic-bezier(.16,1,.3,1);overflow:hidden;text-decoration:none;color:inherit;display:block;
+  box-shadow:0 4px 24px rgba(0,0,0,0.2),inset 0 1px 0 rgba(255,255,255,0.06)}
+.card:hover::after{opacity:1}
+.card:hover::after{opacity:1}
+.card-inner{position:relative;z-index:2;display:flex;align-items:center;gap:14px}
+.card-icon{flex-shrink:0;width:44px;height:44px;border-radius:12px;overflow:hidden;
+  box-shadow:0 2px 10px rgba(0,0,0,0.3);position:relative}
+.card-icon img{width:100%;height:100%;object-fit:cover;display:block}
+.card-icon .icon-ping{position:absolute;top:-2px;right:-2px;width:9px;height:9px;
+  background:var(--accent-green);border-radius:50%;border:2px solid rgba(10,22,40,0.9);
+  animation:pulse 2s ease-in-out infinite;box-shadow:0 0 6px var(--accent-green)}
+.card-text{flex:1;min-width:0}
+.card-title{font-size:14px;font-weight:600;margin-bottom:2px;line-height:1.3}
+.card-tag{font-size:10px;color:var(--accent-blue);font-weight:600;letter-spacing:1px}
+.card-subtitle{font-size:11px;color:var(--text-secondary);font-weight:400;margin-top:1px}
+.card-arrow{flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);transition:all .3s;color:var(--text-muted)}
+.card:hover .card-arrow{background:rgba(0,212,255,0.1);border-color:rgba(0,212,255,0.2);color:var(--accent-blue);transform:translateX(2px)}
+
+.card-main{border-color:rgba(0,255,200,0.12);grid-column:1/-1}
+.card-main .card-icon{width:52px;height:52px;border-radius:14px}
+.card-main .card-title{font-size:17px;font-weight:700}
+.card-main:hover{border-color:rgba(0,255,200,0.3);box-shadow:0 12px 40px rgba(0,255,200,0.1)}
+.card-admin{border-color:rgba(255,149,0,0.15)}
+.card-admin:hover{border-color:rgba(255,149,0,0.3)}
+
+/* STATS - 7 items for symmetry */
+.stats-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin:16px 0}
+.stat-card{
+  background:rgba(255,255,255,0.03);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:18px 10px;text-align:center;
+  transition:all .3s;box-shadow:0 4px 16px rgba(0,0,0,0.2),inset 0 1px 0 rgba(255,255,255,0.04)}
+.stat-card:hover{transform:translateY(-2px);border-color:rgba(0,212,255,0.15)}
+.stat-num{font-size:24px;font-weight:900;margin-bottom:3px;
+  background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-label{font-size:9px;color:var(--text-secondary);font-weight:400;text-transform:uppercase;letter-spacing:.5px}
+
+/* COMBINED SECTIONS - GLASS */
+.glass-section{
+  background:rgba(255,255,255,0.03);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.06);border-radius:24px;padding:32px;margin:20px 0;
+  box-shadow:0 8px 40px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.05);position:relative;overflow:hidden}
+.glass-section::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)}
+.glass-section h3{font-size:18px;font-weight:800;margin-bottom:20px;text-align:center}
+
+.info-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.info-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:22px;transition:all .3s}
+.info-card:hover{background:rgba(255,255,255,0.06);border-color:rgba(0,212,255,0.15)}
+.info-card h4{font-size:14px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.info-card p{font-size:12px;color:var(--text-secondary);line-height:1.6;font-weight:300}
+.info-card ul{padding-left:16px;margin-top:6px}
+.info-card li{font-size:11px;color:var(--text-secondary);line-height:1.6;font-weight:300}
+
+.sound-scale{display:flex;flex-direction:column;margin-top:16px}
+.sound-level{display:flex;align-items:stretch;border:1px solid rgba(255,255,255,0.05);border-bottom:none;
+  background:rgba(255,255,255,0.02);transition:all .3s;overflow:hidden}
+.sound-level:first-child{border-radius:16px 16px 0 0}
+.sound-level:last-child{border-radius:0 0 16px 16px;border-bottom:1px solid rgba(255,255,255,0.05)}
+.sound-level:hover{background:rgba(255,255,255,0.05)}
+.sound-indicator{width:5px;flex-shrink:0}
+.sound-level-green .sound-indicator{background:var(--accent-green)}
+.sound-level-yellow .sound-indicator{background:var(--accent-yellow)}
+.sound-level-orange .sound-indicator{background:var(--accent-orange)}
+.sound-level-red .sound-indicator{background:var(--accent-red)}
+.sound-content{padding:14px 18px;flex:1;display:flex;align-items:center;gap:12px}
+.sound-emoji{font-size:22px;flex-shrink:0}
+.sound-text h4{font-size:12px;font-weight:700;margin-bottom:2px}
+.sound-text p{font-size:11px;color:var(--text-secondary);font-weight:300;line-height:1.4}
+.sound-action{flex-shrink:0;font-size:9px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
+.sound-level-green .sound-action{background:rgba(57,255,20,0.08);color:var(--accent-green);border:1px solid rgba(57,255,20,0.15)}
+.sound-level-yellow .sound-action{background:rgba(255,204,0,0.08);color:var(--accent-yellow);border:1px solid rgba(255,204,0,0.15)}
+.sound-level-orange .sound-action{background:rgba(255,107,53,0.08);color:var(--accent-orange);border:1px solid rgba(255,107,53,0.15)}
+.sound-level-red .sound-action{background:rgba(255,59,48,0.08);color:var(--accent-red);border:1px solid rgba(255,59,48,0.15)}
+
+.shelter-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.shelter-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:14px;padding:16px;text-align:center;transition:all .3s}
+.shelter-card:hover{background:rgba(255,255,255,0.06)}
+.shelter-icon{font-size:26px;margin-bottom:6px}
+.shelter-card h4{font-size:12px;font-weight:700;margin-bottom:3px}
+.shelter-card p{font-size:10px;color:var(--text-secondary);line-height:1.3;font-weight:300}
+.shelter-rating{display:flex;justify-content:center;gap:3px;margin-top:6px}
+.shelter-star{width:10px;height:10px;border-radius:50%}
+.shelter-star.filled{background:var(--accent-green);box-shadow:0 0 4px var(--accent-green)}
+.shelter-star.empty{background:rgba(255,255,255,0.08)}
+
+.checklist{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:22px;margin-top:16px}
+.checklist-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.checklist-header h4{font-size:14px;font-weight:700}
+.checklist-progress{font-size:11px;color:var(--accent-blue);font-weight:600}
+.checklist-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px}
+.checklist-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all .2s;user-select:none}
+.checklist-item:hover{background:rgba(255,255,255,0.03)}
+.checklist-item.checked{opacity:.45}
+.checklist-item.checked .check-box{background:var(--accent-green);border-color:var(--accent-green)}
+.checklist-item.checked .check-box::after{content:'✓';color:#000;font-size:8px;font-weight:900}
+.check-box{width:18px;height:18px;border-radius:5px;border:2px solid rgba(255,255,255,0.15);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.check-text{font-size:11px;color:var(--text-secondary)}
+
+.compare-table{width:100%;border-collapse:separate;border-spacing:0;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:16px;overflow:hidden;min-width:450px;margin-top:16px}
+.compare-table th{padding:12px 16px;font-size:11px;font-weight:700;text-align:left;border-bottom:1px solid rgba(255,255,255,0.04)}
+.compare-table th:first-child{color:var(--text-secondary);width:40%}
+.compare-table th:nth-child(2){color:var(--accent-blue);text-align:center}
+.compare-table th:nth-child(3){color:var(--accent-orange);text-align:center}
+.compare-table td{padding:10px 16px;font-size:11px;color:var(--text-secondary);font-weight:300;border-bottom:1px solid rgba(255,255,255,0.02)}
+.compare-table td:nth-child(2),.compare-table td:nth-child(3){text-align:center;font-weight:500}
+.compare-table tr:last-child td{border-bottom:none}
+.compare-table .yes{color:var(--accent-green)}.compare-table .no{color:var(--accent-red)}.compare-table .partial{color:var(--accent-yellow)}
+.compare-note{font-size:10px;color:var(--text-muted);text-align:center;margin-top:8px;font-style:italic}
+
+.emergency-grid{display:flex;justify-content:center;gap:10px;margin:16px 0;flex-wrap:wrap}
+.emergency-card{
+  background:rgba(18,30,60,0.45);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);
+  border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px 24px;text-align:center;
+  transition:all .3s;text-decoration:none;color:inherit;
+  box-shadow:0 4px 16px rgba(0,0,0,0.2)}
+.emergency-card:hover{transform:translateY(-2px);border-color:rgba(255,59,48,0.2)}
+.emergency-num{font-size:22px;font-weight:900;color:var(--accent-red);margin-bottom:2px}
+.emergency-name{font-size:10px;color:var(--text-secondary)}
+
+.how-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.how-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:20px;text-align:center;transition:all .3s}
+.how-card:hover{background:rgba(255,255,255,0.06)}
+.how-icon{font-size:28px;margin-bottom:10px}
+.how-step{display:inline-block;font-size:9px;font-weight:700;letter-spacing:2px;color:var(--accent-blue);
+  background:rgba(0,212,255,0.08);padding:3px 8px;border-radius:100px;margin-bottom:8px}
+.how-card h4{font-size:13px;font-weight:700;margin-bottom:4px}
+.how-card p{font-size:11px;color:var(--text-secondary);line-height:1.5;font-weight:300}
+
+.reviews-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
+.review-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:16px;padding:20px;transition:all .3s}
+.review-card:hover{background:rgba(255,255,255,0.06)}
+.review-text{font-size:12px;color:var(--text-secondary);line-height:1.6;font-weight:300;font-style:italic;margin-bottom:10px;padding-left:12px;border-left:2px solid rgba(0,212,255,0.15)}
+.review-author{display:flex;align-items:center;gap:8px}
+.review-avatar{width:28px;height:28px;border-radius:50%;background:rgba(0,212,255,0.15);display:flex;align-items:center;justify-content:center;font-size:12px}
+.review-name{font-size:11px;font-weight:600}
+.review-region{font-size:9px;color:var(--text-muted)}
+
+.faq-list{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.faq-item{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;overflow:hidden}
+.faq-question{padding:14px 18px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:600;transition:all .3s;user-select:none}
+.faq-question:hover{color:var(--accent-blue)}
+.faq-chevron{width:16px;height:16px;flex-shrink:0;transition:transform .3s;color:var(--text-secondary)}
+.faq-item.open .faq-chevron{transform:rotate(180deg);color:var(--accent-blue)}
+.faq-answer{max-height:0;overflow:hidden;transition:max-height .4s ease,padding .3s}
+.faq-item.open .faq-answer{max-height:300px;padding:0 18px 14px}
+.faq-answer p{font-size:12px;color:var(--text-secondary);line-height:1.6;font-weight:300}
+
+/* ABOUT - CENTERED */
+.about-section{
+  background:rgba(18,30,60,0.4);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(138,43,226,0.1);border-radius:24px;padding:36px;margin:20px 0;text-align:center;
+  box-shadow:0 8px 40px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.05)}
+.about-section h3{font-size:18px;font-weight:800;margin-bottom:14px;
+  background:linear-gradient(90deg,#fff,var(--accent-blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.about-section p{font-size:13px;color:rgba(255,255,255,0.5);line-height:1.7;margin-bottom:8px;max-width:600px;margin-left:auto;margin-right:auto}
+.about-stats{display:flex;justify-content:center;gap:28px;margin-top:18px;flex-wrap:wrap}
+.about-stat{text-align:center}
+.about-stat .sn{font-size:24px;font-weight:800;color:var(--accent-blue)}
+.about-stat .sl{font-size:10px;color:var(--text-secondary);margin-top:2px}
+
+/* FOOTER */
+.footer-full{margin-top:50px;border-top:1px solid rgba(255,255,255,0.04);padding:30px 0 20px}
+.footer-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:24px;margin-bottom:30px}
+.footer-col h4{font-size:12px;font-weight:700;margin-bottom:12px}
+.footer-col p,.footer-col a{font-size:11px;color:var(--text-secondary);line-height:1.7;font-weight:300;text-decoration:none;display:block;transition:color .2s}
+.footer-col a:hover{color:var(--accent-blue)}
+.footer-bottom{border-top:1px solid rgba(255,255,255,0.04);padding-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.footer-bottom p{font-size:10px;color:var(--text-muted)}
+.footer-logo-text{font-weight:700;color:var(--accent-blue)}
+.footer-links{display:flex;gap:16px;flex-wrap:wrap}
+.footer-links a{font-size:10px;color:var(--text-muted);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--accent-blue)}
+
+.made-by{text-align:center;padding:24px 0 8px;border-top:1px solid rgba(255,255,255,0.03);margin-top:16px}
+.made-by p{font-size:11px;color:var(--text-muted);margin-bottom:4px}
+.made-by .dev-name{font-size:14px;font-weight:700;
+  background:linear-gradient(90deg,#ff6bcb,#00d4ff,#00ffc8);background-size:200% 200%;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  animation:gradientShift 3s ease-in-out infinite;text-decoration:none}
+.made-by .buy-link{display:inline-flex;align-items:center;gap:6px;margin-top:10px;
+  background:rgba(0,212,255,0.08);backdrop-filter:blur(20px);
+  border:1px solid rgba(0,212,255,0.15);border-radius:100px;padding:7px 18px;
+  font-size:11px;font-weight:600;color:var(--accent-blue);text-decoration:none;transition:all .3s}
+.made-by .buy-link:hover{border-color:rgba(0,212,255,0.3);transform:translateY(-2px);color:#fff}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.6);
+  backdrop-filter:blur(15px);display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.active{display:flex}
+.modal{background:rgba(15,25,50,0.9);backdrop-filter:blur(40px) saturate(180%);
+  border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:32px;
+  max-width:580px;width:100%;max-height:80vh;overflow-y:auto;animation:modalIn .3s ease-out;
+  position:relative;box-shadow:0 24px 80px rgba(0,0,0,0.5)}
+@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.modal h3{font-size:17px;font-weight:700;margin-bottom:14px}
+.modal p{font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:10px;font-weight:300}
+.modal-close{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:50%;
+  border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);
+  color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:14px;transition:all .2s;font-family:inherit;backdrop-filter:blur(10px)}
+.modal-close:hover{background:rgba(255,255,255,0.1);color:white}
+
+@media(max-width:768px){
+  .grid{grid-template-columns:1fr;gap:10px}
+  .card-main{grid-column:1}.content{padding:20px 14px 40px}
+  .stats-grid{grid-template-columns:repeat(4,1fr)}
+  .how-grid{grid-template-columns:repeat(2,1fr)}
+  .shelter-grid{grid-template-columns:repeat(3,1fr)}
+  .footer-grid{grid-template-columns:1fr}
+  .footer-bottom{flex-direction:column;text-align:center}
+  .time-display{top:12px;right:12px;padding:6px 12px;font-size:13px}
+  .mini-radar{display:none}
+  .nav-links{display:none}
+  .sound-content{flex-direction:column;gap:8px}.sound-action{align-self:flex-start}
+  .checklist-items{grid-template-columns:1fr}
+  .reviews-grid{grid-template-columns:1fr}
+  .info-cards{grid-template-columns:1fr}
+}
+@media(min-width:769px)and(max-width:1024px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1025px){.grid{grid-template-columns:repeat(3,1fr)}}
+@keyframes fadeInDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+
+/* УНИВЕРСАЛЬНЫЙ ФИКС ЖИДКОГО СТЕКЛА */
+.card, .max-block, .glass-section, .stat-card, .info-card, 
+.about-section, .how-card, .review-card, .faq-item, .emergency-card {
+  /* Заменяем синий фон на идеально прозрачный белый */
+  background: rgba(255, 255, 255, 0.03) !important;
+  
+  /* Делаем размытие мягче, чтобы блоки не "серели" */
+  backdrop-filter: blur(20px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+  
+  /* Делаем рамку светлой и тонкой */
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Убираем синее свечение при наведении */
+.card:hover, .max-block:hover, .stat-card:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--accent-blue) !important;
+  }
+
+.play-pvo-trigger {
+    background: rgba(0, 255, 255, 0.1); /* Полупрозрачный голубой под цвет сайта */
+    color: #00ffff;
+    border: 1px solid rgba(0, 255, 255, 0.5);
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    transition: 0.3s;
+}
+
+.play-pvo-trigger:hover {
+    background: rgba(0, 255, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+}
+
+</style>
+</head>
+<body>
+<div class="scroll-indicator" id="scrollIndicator"></div>
+<div class="sky"></div><div class="stars" id="stars"></div>
+
+<!-- FLAG ON LEFT POLE -->
+<div class="flag-pole-container">
+  <div class="flag-pole"></div>
+  <div class="flag-pole-ball"></div>
+  <div class="flag-canvas-wrap"><canvas class="flag-canvas" id="flagCanvas"></canvas></div>
+</div>
+
+<div class="clouds-layer" id="cloudsLayer"></div>
+<div class="bg-grid"></div><div class="scanline"></div><div class="scan-beam"></div>
+<div class="radar-container radar-top-left"><div class="radar-circle r1"></div><div class="radar-circle r2"></div><div class="radar-circle r3"></div><div class="radar-sweep"></div></div>
+<div class="ripple ripple-1"></div><div class="ripple ripple-2"></div><div class="ripple ripple-3"></div><div class="ripple ripple-4"></div>
+<canvas class="drones-canvas" id="dronesCanvas"></canvas>
+
+<nav class="nav-top" id="navTop"><div class="nav-inner"><div class="nav-logo">🇷🇺 Радар ПФО</div><div class="nav-links"><a href="#channels">Каналы</a><a href="#identify">БПЛА</a><a href="#sound">Шкала</a><a href="#shelter">Укрытия</a><a href="#faq">FAQ</a></div></div></nav>
+<div class="time-display"><span id="clock">00:00:00</span><span class="time-label">МСК</span></div>
+<div class="mini-radar"><div class="mini-radar-grid"></div><div class="mini-radar-sweep"></div><div class="mini-radar-center"></div><canvas id="miniRadarCanvas" width="90" height="90"></canvas></div>
+
+<div class="content">
+
+<header class="header">
+  <div class="header-badge"><div class="badge-dot"></div>СЕТЬ МОНИТОРИНГА БПЛА</div>
+  <h1>РАДАР<span class="radar-word">ПФО</span></h1>
+  <p class="header-subtitle">Народная сеть оповещения и мониторинга БПЛА</p>
+  <p class="header-desc">Крупнейшая независимая сеть отслеживания беспилотников. Тысячи наблюдателей. Мгновенные оповещения.</p>
+  <div class="header-line"></div>
+  <div class="status-bar">
+    <div class="status-item"><span class="dot dot-green"></span>Все каналы активны</div>
+    <div class="status-item"><span class="dot dot-blue"></span>20 регионов</div>
+    <div class="status-item"><span class="dot dot-orange"></span>24/7</div>
+  </div>
+</header>
+
+<!-- MAX MESSENGER -->
+<div class="fade-section">
+<div class="max-block">
+  <div class="max-text">
+    <div class="max-badge">📱 Новинка</div>
+    <h3>Радар ПФО теперь в MAX</h3>
+    <p>Главный канал сети доступен в народном мессенджере MAX. Подписывайтесь, получайте мгновенные оповещения - даже если Telegram недоступен. Та же скорость, те же данные, другая платформа.</p>
+    <a href="https://max.ru/join/uumsFjrTSyNXUWg7RxrZwGVrWOMCXVFCfXkbVtvh3Q0" class="max-btn">📲 Открыть в MAX</a>
+  </div>
+  <div class="phone-3d">
+    <div class="phone-body">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <img src="images/max-icon.png" alt="MAX" class="phone-max-icon">
+        <div class="phone-max-text">Мессенджер</div>
+        <div class="phone-max-name">Радар ПФО</div>
+        <div class="phone-btn">Подписаться</div>
+      </div>
+      <div class="phone-side"></div>
+      <div class="phone-side2"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- STATS -->
+<div class="fade-section">
+<div class="section-title"><h2>📊 Сеть в цифрах</h2><div class="title-line"></div></div>
+<div class="stats-grid">
+  <div class="stat-card"><div class="stat-num" data-count="20">0</div><div class="stat-label">Регионов</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="24">0</div><div class="stat-label">Часа</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="365">0</div><div class="stat-label">Дней</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="30">0</div><div class="stat-label">Сек.</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="16538">0</div><div class="stat-label">Наблюд.</div></div>
+  <div class="stat-card"><div class="stat-num" data-count="3522">0</div><div class="stat-label">Подписч.</div></div>
+  <div class="stat-card"><div class="stat-num">2</div><div class="stat-label">Платформы</div></div>
+</div>
+</div>
+
+<!-- CHANNELS -->
+<div class="fade-section">
+<div class="section-title" id="channels"><h2>📡 Каналы мониторинга</h2><p>Подпишитесь на свой регион! Тыкни на остров снизу.</p><div class="title-line"></div></div>
+<div class="grid">
+  <a href="https://t.me/RRPFO" class="card card-main"><div class="card-inner"><div class="card-icon"><img src="images/radar-pfo.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-tag">⭐ ГЛАВНЫЙ</div><div class="card-title">Радар ПФО</div><div class="card-subtitle">Приволжский федеральный округ</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/TatarAlert" class="card"onclick="window.open(this.href, '_blank'); return false;"><div class="card-inner"><div class="card-icon"><img src="images/radar-tatarstan.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-tag">#RTR</div><div class="card-title">Радар Татарстан</div><div class="card-subtitle">Оповещения по Республике</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/radar_nizhnekamsk" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-nk.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар НК / Елабуга</div><div class="card-subtitle">ОЭЗ Алабуга, г. Елабуга и г. Нижнекамск</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/radar_kzn" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-kazan.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар Казань</div><div class="card-subtitle">Столица РТ</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/radarufo" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-ufo.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар ЮФО</div><div class="card-subtitle">Южный федеральный округ</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/volgasrtv" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-saratov.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар Саратов</div><div class="card-subtitle">Оповещения по Саратову/Энгельсу и области</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/krasnoradar" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-krasnodar.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар Краснодар</div><div class="card-subtitle">Кубань</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/chvradar" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-chuvashia.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар Чувашия</div><div class="card-subtitle">Чебоксары</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/spu_radar" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-samara.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар СПУ</div><div class="card-subtitle">Радар Самара/Пенза/Ульяновск</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/ulradar" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-ulyanovsk.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар Ульяновск</div><div class="card-subtitle">Родина Ильича</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/orenburgye" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-orenburg.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар Оренбург</div><div class="card-subtitle">Оповещения по области</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/bshradar" class="card"><div class="card-inner"><div class="card-icon"><img src="images/radar-bashkortostan.png" alt=""><span class="icon-ping"></span></div><div class="card-text"><div class="card-title">Радар Башкортостан</div><div class="card-subtitle">Оповещения по Уфе и республике</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+  <a href="https://t.me/RRPFO_bot" class="card card-admin"><div class="card-inner"><div class="card-icon"><img src="images/radar-admin.png" alt=""></div><div class="card-text"><div class="card-tag" style="color:#ff9500">ADMIN</div><div class="card-title">Связь и Реклама</div><div class="card-subtitle">Администрация</div></div><div class="card-arrow"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 2l5 5-5 5"/></svg></div></div></a>
+</div>
+</div>
+
+<!-- IDENTIFY + SOUND -->
+<div class="fade-section">
+<div class="glass-section" id="identify">
+  <h3>🔍 Как отличить БПЛА  /  🎧 Что слышно - что делать</h3>
+  <div class="info-cards">
+    <div class="info-card"><h4>🔊 Звук</h4><p>БПЛА - монотонное жужжание. Самолёт - рёв турбин.</p><ul><li>БПЛА: тихое «дзззз»</li><li>Ракета: резкий свист</li></ul></div>
+    <div class="info-card"><h4>📏 Высота</h4><p>50-500м, 150-180 км/ч. Видны глазом. Часто группами.</p></div>
+    <div class="info-card"><h4>🌙 Время</h4><p>Ночью 00:00-06:00. Нет огней. Прямолинейный полёт.</p></div>
+  </div>
+  <div class="sound-scale" id="sound">
+    <div class="sound-level sound-level-green"><div class="sound-indicator"></div><div class="sound-content"><div class="sound-emoji">😌</div><div class="sound-text"><h4>Тишина</h4><p>Уведомления включены</p></div><div class="sound-action">Следите</div></div></div>
+    <div class="sound-level sound-level-yellow"><div class="sound-indicator"></div><div class="sound-content"><div class="sound-emoji">🤔</div><div class="sound-text"><h4>Жужжание вдалеке</h4><p>Проверьте канал</p></div><div class="sound-action">Проверь</div></div></div>
+    <div class="sound-level sound-level-orange"><div class="sound-indicator"></div><div class="sound-content"><div class="sound-emoji">⚠️</div><div class="sound-text"><h4>Нарастающий гул</h4><p>Идите к укрытию</p></div><div class="sound-action">К укрытию</div></div></div>
+    <div class="sound-level sound-level-red"><div class="sound-indicator"></div><div class="sound-content"><div class="sound-emoji">🚨</div><div class="sound-text"><h4>Рядом / ПВО</h4><p>На пол, от окон</p></div><div class="sound-action">Укройся!</div></div></div>
+  </div>
+</div>
+</div>
+
+<!-- SHELTER + BAG -->
+<div class="fade-section">
+<div class="glass-section" id="shelter">
+  <h3>🏠 Укрытия  /  🎒 Тревожная сумка</h3>
+  <div class="shelter-grid">
+    <div class="shelter-card"><div class="shelter-icon">🏗️</div><h4>Подвал</h4><p>Лучшее</p><div class="shelter-rating"><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div></div></div>
+    <div class="shelter-card"><div class="shelter-icon">🚇</div><h4>Метро</h4><p>Отлично</p><div class="shelter-rating"><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div></div></div>
+    <div class="shelter-card"><div class="shelter-icon">🅿️</div><h4>Паркинг</h4><p>Хорошо</p><div class="shelter-rating"><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star empty"></div></div></div>
+    <div class="shelter-card"><div class="shelter-icon">🏢</div><h4>1-2 этаж</h4><p>Средне</p><div class="shelter-rating"><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star empty"></div><div class="shelter-star empty"></div></div></div>
+    <div class="shelter-card"><div class="shelter-icon">🏠</div><h4>Без окон</h4><p>Средне</p><div class="shelter-rating"><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star filled"></div><div class="shelter-star empty"></div><div class="shelter-star empty"></div></div></div>
+    <div class="shelter-card" style="border-color:rgba(255,59,48,0.15)"><div class="shelter-icon">❌</div><h4>У окна</h4><p>Опасно!</p><div class="shelter-rating"><div class="shelter-star empty"></div><div class="shelter-star empty"></div><div class="shelter-star empty"></div><div class="shelter-star empty"></div><div class="shelter-star empty"></div></div></div>
+  </div>
+  <div class="checklist" id="bag">
+    <div class="checklist-header"><h4>🎒 Чеклист</h4><div class="checklist-progress" id="checkProgress">0/16</div></div>
+    <div class="checklist-items" id="checkItems">
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c1"><div class="check-box"></div><div class="check-text">📄 Документы</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c2"><div class="check-box"></div><div class="check-text">💧 Вода</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c3"><div class="check-box"></div><div class="check-text">🩹 Аптечка</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c4"><div class="check-box"></div><div class="check-text">🔦 Фонарик</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c5"><div class="check-box"></div><div class="check-text">🔋 Power bank</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c6"><div class="check-box"></div><div class="check-text">📱 Зарядка</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c7"><div class="check-box"></div><div class="check-text">💊 Лекарства</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c8"><div class="check-box"></div><div class="check-text">💵 Наличные</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c9"><div class="check-box"></div><div class="check-text">🍫 Еда</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c10"><div class="check-box"></div><div class="check-text">🧥 Одежда</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c11"><div class="check-box"></div><div class="check-text">📻 Радио</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c12"><div class="check-box"></div><div class="check-text">🔑 Ключи</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c13"><div class="check-box"></div><div class="check-text">🧴 Гигиена</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c14"><div class="check-box"></div><div class="check-text">🥾 Обувь</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c15"><div class="check-box"></div><div class="check-text">📝 Номера</div></div>
+      <div class="checklist-item" onclick="toggleCheck(this)" data-key="c16"><div class="check-box"></div><div class="check-text">🧸 Для детей</div></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- COMPARE + EMERGENCY + HOW + REVIEWS -->
+<div class="fade-section">
+<div class="glass-section">
+  <h3>⚖️ Радар ПФО vs МЧС  /  📞 Экстренные номера</h3>
+  <div style="overflow-x:auto">
+  <table class="compare-table"><tr><th></th><th>Радар ПФО</th><th>МЧС</th></tr><tr><td>Скорость</td><td class="yes">~30с</td><td class="partial">5-30мин</td></tr><tr><td>24/7</td><td class="yes">✓</td><td class="yes">✓</td></tr><tr><td>Покрытие</td><td class="partial">13</td><td class="yes">Вся РФ</td></tr><tr><td>Push</td><td class="yes">TG/MAX</td><td class="partial">SMS</td></tr><tr><td>Маршруты</td><td class="yes">✓</td><td class="no">✗</td></tr></table>
+  </div>
+  <p class="compare-note">⚠️ Используйте оба. Угроза → 112</p>
+  <div class="emergency-grid" style="margin-top:24px">
+    <a href="tel:112" class="emergency-card"><div class="emergency-num">112</div><div class="emergency-name">Спасение</div></a>
+    <a href="tel:101" class="emergency-card"><div class="emergency-num">101</div><div class="emergency-name">Пожарная</div></a>
+    <a href="tel:102" class="emergency-card"><div class="emergency-num">102</div><div class="emergency-name">Полиция</div></a>
+    <a href="tel:103" class="emergency-card"><div class="emergency-num">103</div><div class="emergency-name">Скорая</div></a>
+    <a href="tel:104" class="emergency-card"><div class="emergency-num">104</div><div class="emergency-name">Газ</div></a>
+  </div>
+</div>
+</div>
+
+<div class="fade-section">
+<div class="glass-section">
+  <h3>⚡ Как работает  /  💬 О нас пишут</h3>
+  <div class="how-grid">
+    <div class="how-card"><div class="how-icon">👁️</div><div class="how-step">1</div><h4>Обнаружение</h4><p>Фиксация БПЛА</p></div>
+    <div class="how-card"><div class="how-icon">🔍</div><div class="how-step">2</div><h4>Проверка</h4><p>Верификация</p></div>
+    <div class="how-card"><div class="how-icon">📢</div><div class="how-step">3</div><h4>Оповещение</h4><p>Публикация</p></div>
+    <div class="how-card"><div class="how-icon">🛡️</div><div class="how-step">4</div><h4>Защита</h4><p>Вы в безопасности</p></div>
+  </div>
+  <div class="reviews-grid">
+    <div class="review-card"><div class="review-text">«Предупредил за 15 мин до сирен. Не ложимся без уведомлений.»</div><div class="review-author"><div class="review-avatar">👤</div><div><div class="review-name">Ангелина.С</div><div class="review-region">Саратовская обл.</div></div></div></div>
+    <div class="review-card"><div class="review-text">«МЧС через полчаса, тут почти сразу. Единственный оперативный источник.»</div><div class="review-author"><div class="review-avatar">👤</div><div><div class="review-name">Елена.В</div><div class="review-region">Елабуга</div></div></div></div>
+    <div class="review-card"><div class="review-text">«Маме 72, научил Telegram ради канала. Теперь сама звонит: укройся.»</div><div class="review-author"><div class="review-avatar">👤</div><div><div class="review-name">Кирилл.О</div><div class="review-region">Краснодар</div></div></div></div>
+    <div class="review-card"><div class="review-text">«Ночные смены. Канал предупреждает - успеваем в укрытие.»</div><div class="review-author"><div class="review-avatar">👤</div><div><div class="review-name">Александр.И</div><div class="review-region">Белгород</div></div></div></div>
+  </div>
+</div>
+</div>
+
+<!-- FAQ + ABOUT -->
+<div class="fade-section">
+<div class="glass-section" id="faq">
+  <h3>❓ FAQ</h3>
+  <div class="faq-list">
+    <div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Бесплатно?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div><div class="faq-answer"><p>Да, все каналы бесплатны.</p></div></div>
+    <div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Откуда данные?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div><div class="faq-answer"><p>Тысячи наблюдателей + открытые источники.</p></div></div>
+    <div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Заменяет МЧС?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div><div class="faq-answer"><p>Нет. Дополняем. Угроза → 112.</p></div></div>
+    <div class="faq-item"><div class="faq-question" onclick="toggleFaq(this)">Есть в MAX?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div><div class="faq-answer"><p>Да! Радар ПФО доступен в MAX как альтернатива Telegram.</p></div></div>
+  </div>
+</div>
+
+<div class="about-section">
+  <h3>Радар ПФО - Народная сеть мониторинга</h3>
+  <p>Крупнейшая независимая сеть. Когда системы запаздывают - народный мониторинг спасает жизни. 24/7/365. Доступен в Telegram и MAX.</p>
+  <div class="about-stats">
+    <div class="about-stat"><div class="sn">2025</div><div class="sl">Основан</div></div>
+    <div class="about-stat"><div class="sn">20</div><div class="sl">Регионов</div></div>
+    <div class="about-stat"><div class="sn">24/7</div><div class="sl">Мониторинг</div></div>
+    <div class="about-stat"><div class="sn">&lt;30с</div><div class="sl">Отклик</div></div>
+    <div class="about-stat"><div class="sn">2</div><div class="sl">Платформы</div></div>
+  </div>
+</div>
+</div>
+
+<footer class="footer-full">
+  <div class="footer-grid">
+    <div class="footer-col"><h4>Радар ПФО</h4><p>Народная сеть мониторинга БПЛА. Telegram + MAX.</p><p style="margin-top:10px;color:var(--accent-blue);font-weight:500">🇷🇺 Берегите себя 🛡️</p></div>
+    <div class="footer-col"><h4>Каналы</h4><a href="#">Радар ПФО</a><a href="#">Радар Татарстан</a><a href="#">Радар Казань</a><a href="#">Радар Саратов</a><a href="#">Связь</a></div>
+     <button class="play-pvo-trigger" onclick="openPvoGame()">🪖 Играть в ПВО</button>
+    <div class="footer-col"><h4>Полезное</h4><a href="#identify">Как отличить</a><a href="#sound">Шкала</a><a href="#shelter">Укрытия</a><a href="#bag">Сумка</a></div>
+    <div class="footer-col"><h4>Документы</h4><a href="#" onclick="event.preventDefault();openModal('privacy')">Конфиденциальность</a><a href="#" onclick="event.preventDefault();openModal('terms')">Условия</a><a href="#" onclick="event.preventDefault();openModal('disclaimer')">Дисклеймер</a></div>
+  </div>
+  <div class="footer-bottom"><p><span class="footer-logo-text">Радар ПФО</span> © 2026</p><div class="footer-links"><a href="#" onclick="event.preventDefault();openModal('privacy')">Конфиденциальность</a><a href="#" onclick="event.preventDefault();openModal('terms')">Условия</a></div></div>
+  <div class="made-by"><p>Сделано с 💙 в</p><p><a href="https://xn--80aaa4acakddeefkgc.xn--p1ai/" target="_blank" rel="noopener" class="dev-name">малинка.dev</a></p><a href="https://xn--80aaa4acakddeefkgc.xn--p1ai/" target="_blank" rel="noopener" class="buy-link">🛒 Купить сайт / скрипт</a></div>
+</footer>
+</div>
+
+<div class="modal-overlay" id="modal-privacy" onclick="closeModal(event,'privacy')"><div class="modal" onclick="event.stopPropagation()"><button class="modal-close" onclick="closeModalById('privacy')">✕</button><h3>🔒 Конфиденциальность</h3><p>Сайт НЕ собирает данные. Нет cookies, трекеров. localStorage только для чеклиста. Данные подписчиков Telegram/MAX нам недоступны.</p></div></div>
+<div class="modal-overlay" id="modal-terms" onclick="closeModal(event,'terms')"><div class="modal" onclick="event.stopPropagation()"><button class="modal-close" onclick="closeModalById('terms')">✕</button><h3>📜 Условия</h3><p>Каталог каналов + справочные материалы. Рекомендации не заменяют МЧС. 16+.</p></div></div>
+<div class="modal-overlay" id="modal-disclaimer" onclick="closeModal(event,'disclaimer')"><div class="modal" onclick="event.stopPropagation()"><button class="modal-close" onclick="closeModalById('disclaimer')">✕</button><h3>⚠️ Дисклеймер</h3><p>Информация «как есть». Не гарантируем точность. Не заменяем МЧС. Угроза → <strong style="color:var(--accent-red)">112</strong></p></div></div>
+
+<script>
+!function(){const c=document.getElementById('stars');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';s.style.left=Math.random()*100+'%';s.style.top=Math.random()*60+'%';s.style.animationDelay=Math.random()*3+'s';s.style.animationDuration=(2+Math.random()*4)+'s';const z=Math.random()*2+.5;s.style.width=z+'px';s.style.height=z+'px';c.appendChild(s)}}();
+
+!function(){const l=document.getElementById('cloudsLayer');function mk(y,s,sp,o){const g=document.createElement('div');g.style.cssText=`position:absolute;top:${y}%;animation:cloudGroupDrift ${sp}s linear infinite;animation-delay:${-Math.random()*sp}s`;const n=3+Math.floor(Math.random()*3);for(let i=0;i<n;i++){const p=document.createElement('div');const w=(120+Math.random()*200)*s,h=(60+Math.random()*80)*s;p.className='cloud-puff'+(Math.random()>.5?' dense':'');p.style.cssText=`width:${w}px;height:${h}px;left:${(i-n/2)*60*s}px;top:${(Math.random()-.5)*40*s}px;opacity:${o};filter:blur(${20*s}px)`;g.appendChild(p)}l.appendChild(g)}
+mk(10,1.5,120,.06);mk(30,1.2,90,.08);mk(50,1.8,150,.05);mk(70,1,100,.07)}();
+
+!function u(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Europe/Moscow'});setTimeout(u,1000)}();
+
+// DRONES
+!function(){
+const canvas=document.getElementById('dronesCanvas'),ctx=canvas.getContext('2d');
+const mrc=document.getElementById('miniRadarCanvas'),mrx=mrc.getContext('2d');
+let W,H;function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}resize();addEventListener('resize',resize);
+const exp=[];
+class D{constructor(){this.reset()}
+reset(){this.tp=Math.random()>.4?'s':'c';this.sz=this.tp==='s'?(12+Math.random()*10):(8+Math.random()*8);const d=Math.floor(Math.random()*4),sp=.4+Math.random()*.8;if(d===0){this.x=-40;this.y=Math.random()*H*.8+H*.05;this.vx=sp;this.vy=(Math.random()-.5)*.15;this.a=90}else if(d===1){this.x=W+40;this.y=Math.random()*H*.8+H*.05;this.vx=-sp;this.vy=(Math.random()-.5)*.15;this.a=-90}else if(d===2){this.x=-40;this.y=-40+Math.random()*H*.3;this.vx=sp*.8;this.vy=sp*.4;this.a=115}else{this.x=W+40;this.y=-40+Math.random()*H*.3;this.vx=-sp*.8;this.vy=sp*.4;this.a=-115}this.wb=Math.random()*Math.PI*2;this.ws=.005+Math.random()*.01;this.op=.07+Math.random()*.1;this.alive=true;this.bl=Math.random()*Math.PI*2;this.tr=[]}
+update(){if(!this.alive)return;this.wb+=this.ws;this.x+=this.vx;this.y+=this.vy+Math.sin(this.wb)*.02;this.bl+=.05;if(Math.random()>.65)this.tr.push({x:this.x,y:this.y,age:0});this.tr=this.tr.filter(t=>{t.age++;return t.age<50});if(this.x<-100||this.x>W+100||this.y<-100||this.y>H+100)this.reset()}
+draw(c){if(!this.alive)return;c.save();c.globalAlpha=this.op;c.translate(this.x,this.y);c.rotate(this.a*Math.PI/180);c.strokeStyle='rgba(0,212,255,1)';c.lineWidth=1;if(this.tp==='s'){const s=this.sz;c.beginPath();c.moveTo(0,-s);c.lineTo(-s*.6,s*.6);c.lineTo(-s*.15,s*.3);c.lineTo(0,s*.8);c.lineTo(s*.15,s*.3);c.lineTo(s*.6,s*.6);c.closePath();c.stroke()}else{const s=this.sz;c.beginPath();c.moveTo(-s,-s);c.lineTo(s,s);c.moveTo(s,-s);c.lineTo(-s,s);c.stroke();[[-s,-s],[s,-s],[-s,s],[s,s]].forEach(([mx,my])=>{c.beginPath();c.arc(mx,my,s*.4,0,Math.PI*2);c.stroke()})}c.restore();if(this.tp==='s'){c.save();this.tr.forEach(t=>{c.globalAlpha=(1-t.age/50)*this.op*.25;c.fillStyle='rgba(255,150,50,0.5)';c.beginPath();c.arc(t.x,t.y,1,0,Math.PI*2);c.fill()});c.restore()}}
+destroy(){this.alive=false;mkE(this.x,this.y);setTimeout(()=>this.reset(),1500)}}
+function mkE(x,y){exp.push({x,y,age:0,mx:90,p:Array.from({length:18},()=>({dx:(Math.random()-.5)*7,dy:(Math.random()-.5)*7,s:1+Math.random()*3,c:`rgba(255,${100+Math.random()*100|0},${Math.random()*50|0},`,d:.94+Math.random()*.04})),m:{sx:x+(Math.random()-.5)*250,sy:y+120+Math.random()*150}})}
+function drawE(){for(let i=exp.length-1;i>=0;i--){const e=exp[i];e.age++;if(e.age>e.mx){exp.splice(i,1);continue}const p=e.age/e.mx;if(e.age<10){const t=Math.min(e.age/7,1),tx=e.m.sx+(e.x-e.m.sx)*t,ty=e.m.sy+(e.y-e.m.sy)*t;ctx.save();ctx.globalAlpha=(1-t)*.5;ctx.strokeStyle='rgba(255,200,100,0.7)';ctx.lineWidth=1.5;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(e.m.sx,e.m.sy);ctx.lineTo(tx,ty);ctx.stroke();ctx.setLineDash([]);ctx.restore()}if(e.age<10){const a=1-e.age/10,sz=20+e.age*4;ctx.save();ctx.globalAlpha=a*.8;const g=ctx.createRadialGradient(e.x,e.y,0,e.x,e.y,sz);g.addColorStop(0,'rgba(255,255,200,1)');g.addColorStop(.4,'rgba(255,150,50,0.6)');g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(e.x,e.y,sz,0,Math.PI*2);ctx.fill();ctx.restore()}if(e.age<20){const rp=e.age/20;ctx.save();ctx.globalAlpha=(1-rp)*.4;ctx.strokeStyle='rgba(255,200,100,0.5)';ctx.lineWidth=2*(1-rp);ctx.beginPath();ctx.arc(e.x,e.y,rp*80,0,Math.PI*2);ctx.stroke();ctx.restore()}e.p.forEach(pp=>{pp.dx*=pp.d;pp.dy*=pp.d;pp.dy+=.025;const px=e.x+pp.dx*e.age,py=e.y+pp.dy*e.age,a=Math.max(0,1-p*1.2);ctx.save();ctx.globalAlpha=a*.7;ctx.fillStyle=pp.c+a+')';ctx.beginPath();ctx.arc(px,py,pp.s*(1-p*.5),0,Math.PI*2);ctx.fill();ctx.restore()})}}
+const drones=[];for(let i=0;i<10;i++){const d=new D();d.x=Math.random()*W;d.y=Math.random()*H;drones.push(d)}
+let lk=Date.now()+2000,ki=2500+Math.random()*2000;
+function anim(){ctx.clearRect(0,0,W,H);drones.forEach(d=>{d.update();d.draw(ctx)});if(Date.now()-lk>ki){const t=drones.filter(d=>d.alive&&d.x>30&&d.x<W-30&&d.y>30&&d.y<H-30);if(t.length){t[Math.random()*t.length|0].destroy();lk=Date.now();ki=2500+Math.random()*2000}}drawE();mrx.clearRect(0,0,90,90);drones.forEach(d=>{if(!d.alive)return;mrx.fillStyle='rgba(0,212,255,0.7)';mrx.beginPath();mrx.arc(d.x/W*90,d.y/H*90,1.5,0,Math.PI*2);mrx.fill()});requestAnimationFrame(anim)}anim()}();
+
+document.querySelectorAll('.card').forEach(c=>{c.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect();c.style.setProperty('--mouse-x',(e.clientX-r.left)/r.width*100+'%');c.style.setProperty('--mouse-y',(e.clientY-r.top)/r.height*100+'%')});c.addEventListener('click',e=>e.preventDefault())});
+
+const fadeObs=new IntersectionObserver(entries=>{entries.forEach(e=>{e.target.classList.toggle('visible',e.isIntersecting)})},{threshold:0.08,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.fade-section').forEach(s=>fadeObs.observe(s));
+
+addEventListener('scroll',()=>{const st=document.documentElement.scrollTop;const p=st/(document.documentElement.scrollHeight-document.documentElement.clientHeight)*100;document.getElementById('scrollIndicator').style.width=(p||0)+'%';document.getElementById('navTop').classList.toggle('visible',st>300)});
+
+function toggleFaq(el){el.parentElement.classList.toggle('open')}
+function openModal(id){document.getElementById('modal-'+id).classList.add('active');document.body.style.overflow='hidden'}
+function closeModalById(id){document.getElementById('modal-'+id).classList.remove('active');document.body.style.overflow=''}
+function closeModal(e,id){if(e.target===e.currentTarget)closeModalById(id)}
+
+!function(){const o=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){const el=e.target;const t=parseInt(el.dataset.count);if(isNaN(t))return;let c=0;const s=Math.max(1,Math.floor(t/50));const i=setInterval(()=>{c+=s;if(c>=t){c=t;clearInterval(i)}el.textContent=c.toLocaleString('ru-RU')},25);o.unobserve(el)}})},{threshold:.5});document.querySelectorAll('[data-count]').forEach(el=>o.observe(el))}();
+
+function toggleCheck(el){el.classList.toggle('checked');const key=el.dataset.key;const ch=el.classList.contains('checked');try{const d=JSON.parse(localStorage.getItem('sr_cl')||'{}');d[key]=ch;localStorage.setItem('sr_cl',JSON.stringify(d))}catch(e){}updCk()}
+function updCk(){const t=document.querySelectorAll('.checklist-item').length;const d=document.querySelectorAll('.checklist-item.checked').length;document.getElementById('checkProgress').textContent=`${d}/${t}`}
+try{const d=JSON.parse(localStorage.getItem('sr_cl')||'{}');Object.keys(d).forEach(k=>{if(d[k]){const el=document.querySelector(`[data-key="${k}"]`);if(el)el.classList.add('checked')}})}catch(e){}
+updCk();
+</script>
+
+<script>
+  document.querySelectorAll('.card').forEach(card => {
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', function() {
+      const url = this.getAttribute('href') || 'https://t.me/RRPFO'; // Укажите нужную логику
+      window.open(url, '_blank');
+    });
+  });
+</script>
+
+<div class="radar-cursor"></div>
+<div class="radar-dot"></div>
+
+<script>
+    const dot = document.querySelector('.radar-dot');
+    const circle = document.querySelector('.radar-cursor');
+
+    document.addEventListener('mousemove', (e) => {
+        const { clientX: x, clientY: y } = e;
+        
+        // Плавное следование
+        dot.style.left = x + 'px';
+        dot.style.top = y + 'px';
+        
+        circle.style.left = x + 'px';
+        circle.style.top = y + 'px';
+    });
+
+    // Увеличиваем радар при наведении на ссылки и карточки
+    document.querySelectorAll('a, .card, button').forEach(el => {
+        el.addEventListener('mouseenter', () => circle.classList.add('cursor-active'));
+        el.addEventListener('mouseleave', () => circle.classList.remove('cursor-active'));
+    });
+</script>
+
+<!-- === СИСТЕМА ПВО: ПОЛНАЯ СБОРКА С ФИКСОМ ТЕКСТА И ЗВУКОМ ПЕЧАТИ === -->
+<style>
+    .play-pvo-trigger {
+        background: rgba(0, 255, 255, 0.1) !important; color: #00ffff !important;
+        border: 1px solid #00ffff !important; padding: 8px 18px !important;
+        border-radius: 4px !important; cursor: crosshair !important;
+        font-family: 'Courier New', monospace !important; font-size: 13px !important;
+        margin-top: 10px !important; transition: 0.3s !important; text-transform: uppercase;
+        display: block; touch-action: manipulation;
+    }
+
+    #pvo-modal {
+        display: none; position: fixed !important; inset: 0 !important;
+        background: rgba(0,0,0,0.95) !important; z-index: 999999 !important;
+        align-items: center; justify-content: center; backdrop-filter: blur(8px);
+        touch-action: none;
+    }
+
+    #pvo-window {
+        position: relative; width: 98%; max-width: 700px;
+        background: #050505; border: 2px solid #00ff00; padding: 5px;
+        box-shadow: 0 0 40px rgba(0, 255, 0, 0.3);
+        user-select: none; -webkit-user-select: none;
+    }
+
+    /* ЭФФЕКТ ТРЯСКИ */
+    @keyframes pvo-shake {
+        0% { transform: translate(1px, 1px) rotate(0deg); }
+        20% { transform: translate(-3px, -2px) rotate(-1deg); }
+        40% { transform: translate(-1px, 2px) rotate(1deg); }
+        60% { transform: translate(3px, 1px) rotate(0deg); }
+        80% { transform: translate(-1px, -1px) rotate(1deg); }
+        100% { transform: translate(1px, -2px) rotate(-1deg); }
+    }
+    .shake-active { 
+        animation: pvo-shake 0.15s infinite; 
+        border-color: #f00 !important; 
+        box-shadow: 0 0 60px rgba(255, 0, 0, 0.8) !important; 
+    }
+
+    #pvo-container { 
+        width: 100%; height: 55vh; max-height: 500px; position: relative; 
+        overflow: hidden; background: #000; touch-action: none;
+        cursor: crosshair !important;
+    }
+
+    .radar-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(0, 255, 0, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 0, 0.1) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; }
+
+    .pvo-target { position: absolute; width: 45px; height: 45px; background-size: contain; background-repeat: no-repeat; z-index: 100; cursor: crosshair !important; filter: brightness(1) drop-shadow(0 0 5px #0f0) !important; }
+    .pvo-boss { width: 80px !important; height: 80px !important; filter: drop-shadow(0 0 15px #f00) !important; }
+    .pvo-friendly { filter: drop-shadow(0 0 10px #00ffff) brightness(1.2) !important; }
+
+    .pvo-lock-on { position: absolute; width: 60px; height: 60px; border: 2px solid #ff0000; box-shadow: 0 0 15px #ff0000; transform: translate(-50%, -50%); pointer-events: none; z-index: 106; animation: lock-pulse 0.1s infinite; }
+    @keyframes lock-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .pvo-dialog-box { width: 100%; min-height: 90px; background: rgba(0, 20, 0, 0.95); border-top: 1px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; padding: 12px 15px; box-sizing: border-box; font-size: 14px; position: relative; }
+    .pvo-dialog-text { white-space: pre-wrap !important; line-height: 1.4; display: block; margin-top: 5px; color: #0f0; min-height: 1.4em; }
+    
+    .sound-control-btn { position: absolute; right: 15px; top: 10px; cursor: pointer; font-size: 18px; }
+    .sound-mixer { display: none; position: absolute; right: 10px; bottom: 95px; background: #050505; border: 1px solid #00ff00; padding: 12px; z-index: 2000; color: #0f0; font-size: 11px; width: 180px; }
+    .sound-mixer input { width: 100%; accent-color: #0f0; margin-bottom: 10px; }
+
+    .pvo-info { position: absolute; top: 10px; left: 10px; color: #00ff00; font-family: monospace; font-size: 14px; z-index: 110; background: rgba(0,0,0,0.6); padding: 5px; pointer-events: none; }
+    .pvo-screen { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,10,0,0.95); z-index: 1000; color: #0f0; text-align: center; padding: 20px; font-family: monospace; }
+    .pvo-btn { background: transparent; border: 1px solid #00ff00; color: #00ff00; padding: 15px 30px; cursor: pointer; text-transform: uppercase; font-weight: bold; margin: 10px; }
+    
+    .pvo-missile { position: absolute; width: 5px; height: 18px; background: #f00; box-shadow: 0 0 12px #f00; border-radius: 2px; z-index: 105; transition: all 0.18s linear; pointer-events: none; }
+</style>
+
+<div id="pvo-modal">
+    <div id="pvo-window">
+        <button style="position:absolute; right:5px; top:-45px; color:#0f0; background:none; border:none; font-size:40px; cursor:pointer;" onclick="closePvoGame()">×</button>
+        <div id="pvo-container">
+            <div class="radar-grid"></div>
+            <div class="pvo-info" id="pvo-info-val">STATUS: STANDBY</div>
+            
+            <div id="pvo-choice-screen" class="pvo-screen">
+                <h2 style="margin-bottom:20px;">ВЫБЕРИТЕ КОМАНДНУЮ СТРУКТУРУ:</h2>
+                <button id="wrong-choice-btn" class="pvo-btn" onclick="wrongChoice()">ИГРАТЬ САМОСТОЯТЕЛЬНО</button>
+                <button class="pvo-btn" onclick="correctChoice()">РАДАР ПФО</button>
+            </div>
+
+            <div id="pvo-over-screen" class="pvo-screen" style="display:none; color:#f44;">
+                <h2 id="over-title">СЕКТОР ПОТЕРЯН!</h2>
+                <p id="final-score" style="color:#0f0; margin:10px 0;"></p>
+                <button class="pvo-btn" onclick="startGamePVO()">РЕСТАРТ</button>
+            </div>
+        </div>
+
+        <div id="pvo-mixer" class="sound-mixer">
+            <label>ОБЩАЯ ГРОМКОСТЬ</label>
+            <input type="range" id="vol-master" min="0" max="1" step="0.1" value="0.4" oninput="updateVolumes()">
+            <label>ЭФФЕКТЫ</label>
+            <input type="range" id="vol-fx" min="0" max="1" step="0.1" value="0.3" oninput="updateVolumes()">
+        </div>
+
+        <div class="pvo-dialog-box">
+            <div style="font-weight:bold; color:#fff; font-size:11px; letter-spacing:1px;">[ СВЯЗЬ: ШТАБ ] <span class="sound-control-btn" onclick="toggleMixer()">⚙️</span></div>
+            <div id="dialog-text" class="pvo-dialog-text">Выберите команду...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+let score = 0; let level = 1; let gameActive = false; 
+let spawnInterval; let musicInterval; let droneCounter = 0;
+let typeTimeout; // Для фикса наложения текста
+
+const radarSnd = new Audio('sounds/radar.mp3'); radarSnd.loop = true;
+const actionSnd = new Audio('sounds/action.mp3'); actionSnd.loop = true; actionSnd.volume = 0;
+const sirenSnd = new Audio('sounds/siren.mp3'); sirenSnd.loop = true;
+const boomSnd = new Audio('sounds/explosion.mp3');
+const launchSnd = new Audio('sounds/launch.mp3');
+const typeSnd = new Audio('sounds/typewriter.mp3');
+
+function updateVolumes() {
+    const m = document.getElementById('vol-master').value;
+    const f = document.getElementById('vol-fx').value;
+    radarSnd.volume = m * 0.4;
+    sirenSnd.volume = m * 0.5;
+    boomSnd.volume = f;
+    launchSnd.volume = f;
+    typeSnd.volume = f * 0.5;
+}
+
+function toggleMixer() { const m = document.getElementById('pvo-mixer'); m.style.display = m.style.display === 'block' ? 'none' : 'block'; }
+
+// ИСПРАВЛЕННАЯ ФУНКЦИЯ ПЕЧАТИ (БЕЗ НАЛОЖЕНИЙ)
+function typeMsg(text) {
+    const el = document.getElementById('dialog-text');
+    clearTimeout(typeTimeout); // Убиваем старый цикл печати
+    el.innerText = '';
+    let i = 0;
+    
+    function type() {
+        if (i < text.length) {
+            el.innerText += text.charAt(i);
+            // Звук при каждой букве (кроме пробелов)
+            if (text.charAt(i) !== ' ') {
+                typeSnd.currentTime = 0;
+                typeSnd.play().catch(()=>{});
+            }
+            i++;
+            typeTimeout = setTimeout(type, 30);
+        }
+    }
+    type();
+}
+
+function wrongChoice() {
+    const btn = document.getElementById('wrong-choice-btn');
+    btn.style.color = '#f00'; btn.innerText = "НЕПРАВИЛЬНЫЙ ВЫБОР";
+    typeMsg("ШТАБ: Только ПФО гарантирует выживание.");
+}
+
+function correctChoice() { document.getElementById('pvo-choice-screen').style.display = 'none'; startGamePVO(); }
+
+function openPvoGame() { 
+    document.getElementById('pvo-modal').style.display = 'flex'; 
+    document.getElementById('pvo-choice-screen').style.display = 'flex';
+    typeMsg("Инициализация. Выберите сторону.");
+}
+
+function closePvoGame() { 
+    document.getElementById('pvo-modal').style.display = 'none'; 
+    gameActive = false; clearInterval(spawnInterval); clearInterval(musicInterval); clearTimeout(typeTimeout);
+    radarSnd.pause(); actionSnd.pause(); sirenSnd.pause(); 
+}
+
+function startGamePVO() {
+    score = 0; level = 1; droneCounter = 0; gameActive = true; 
+    const win = document.getElementById('pvo-window');
+    win.classList.remove('shake-active');
+    updateVolumes();
+    actionSnd.volume = 0;
+    radarSnd.play().catch(()=>{});
+    actionSnd.play().catch(()=>{});
+    document.getElementById('pvo-over-screen').style.display = 'none';
+    document.getElementById('over-title').innerText = "СЕКТОР ПОТЕРЯН!";
+    document.getElementById('over-title').style.color = "#f44";
+    document.querySelectorAll('.pvo-target, .pvo-missile').forEach(t => t.remove());
+    typeMsg("РАДАР ПФО: Сектор под наблюдением. Небо чистое.");
+    startSpawning();
+    
+    musicInterval = setInterval(() => {
+        if(!gameActive) return;
+        const drones = document.querySelectorAll('.pvo-target').length;
+        const m = document.getElementById('vol-master').value;
+        let targetAction = (drones > 3) ? Math.min(m, (drones-3) * 0.15) : 0;
+        let step = 0.02;
+        if (actionSnd.volume < targetAction) actionSnd.volume = Math.min(targetAction, actionSnd.volume + step);
+        if (actionSnd.volume > targetAction) actionSnd.volume = Math.max(targetAction, actionSnd.volume - step);
+        radarSnd.volume = (m * 0.4) * (1 - (actionSnd.volume / m));
+    }, 100);
+}
+
+function startSpawning() {
+    if(spawnInterval) clearInterval(spawnInterval);
+    spawnInterval = setInterval(createTarget, Math.max(300, 1300 - (level * 150)));
+}
+
+function createTarget() {
+    if (!gameActive) return;
+    droneCounter++;
+    const canvas = document.getElementById('pvo-container');
+    const target = document.createElement('div');
+    const isFriendly = (droneCounter % 10 === 0);
+    const isBoss = !isFriendly && (score > 0 && score % 10 === 0);
+    
+    target.className = 'pvo-target';
+    if(isFriendly) {
+        target.classList.add('pvo-friendly');
+        target.style.backgroundImage = "url('drones/friendly.png')";
+        target.dataset.hp = 1;
+    } else if(isBoss) { 
+        target.classList.add('pvo-boss'); 
+        target.dataset.hp = 5; 
+        target.style.backgroundImage = `url('drones/drone${Math.floor(Math.random()*3)+1}.png')`;
+    } else { 
+        target.dataset.hp = 1; 
+        target.style.backgroundImage = `url('drones/drone${Math.floor(Math.random()*3)+1}.png')`;
+    }
+    
+    target.style.left = Math.random() * (canvas.offsetWidth - (isBoss ? 80 : 50)) + 'px';
+    target.style.top = '-80px';
+    canvas.appendChild(target);
+    
+    let pos = -80; 
+    let speed = (isFriendly ? 0.9 : (isBoss ? 0.8 : 1.3 + (level * 0.3))) + Math.random() * 1.5;
+    
+    let move = setInterval(() => {
+        if (!gameActive) { clearInterval(move); target.remove(); return; }
+        pos += speed; target.style.top = pos + 'px';
+        if (pos > (canvas.offsetHeight - 50)) { 
+            if(!isFriendly) endGame(); 
+            else target.remove(); 
+            clearInterval(move); 
+        }
+    }, 25);
+
+    const onHit = (e) => {
+        e.preventDefault();
+        if(!gameActive || target.dataset.locked === "true") return;
+        
+        if(isFriendly) {
+            triggerTribunal();
+            return;
+        }
+
+        target.dataset.locked = "true";
+        const lock = document.createElement('div');
+        lock.className = 'pvo-lock-on';
+        lock.style.left = (parseInt(target.style.left) + (isBoss?40:22)) + 'px';
+        lock.style.top = (parseInt(target.style.top) + (isBoss?40:22)) + 'px';
+        canvas.appendChild(lock);
+        setTimeout(() => { lock.remove(); launchMissile(target, move); target.dataset.locked = "false"; }, 75);
+    };
+    target.addEventListener('mousedown', onHit);
+    target.addEventListener('touchstart', onHit, {passive: false});
+}
+
+function triggerTribunal() {
+    gameActive = false;
+    const win = document.getElementById('pvo-window');
+    win.classList.add('shake-active');
+    sirenSnd.play().catch(()=>{});
+    
+    const insults = [
+        "ШТАБ: ТЫ ЧТО СДЕЛАЛ?! ЭТО БЫЛ НАШ КУРЬЕР С ГУМАНИТАРКОЙ!",
+        "ШТАБ: ОГОНЬ ПО СВОИМ! ТЫ СБИЛ ДИПЛОМАТИЧЕСКИЙ БОРТ, ИДИОТ!",
+        "ШТАБ: ТРИБУНАЛ ТЕБЕ ОБЕСПЕЧЕН! ТЫ ТОЛЬКО ЧТО УГРОБИЛ СВОИХ!",
+        "ШТАБ: ДЕБИЛ! СМОТРИ НА РАДАР, ТЫ СБИЛ ГРУЗ С ЗАРПЛАТОЙ ШТАБА!"
+    ];
+    typeMsg(insults[Math.floor(Math.random() * insults.length)]);
+
+    setTimeout(() => {
+        document.getElementById('over-title').innerText = "ВОЕННЫЙ ТРИБУНАЛ";
+        document.getElementById('over-title').style.color = "#ffea00";
+        document.getElementById('pvo-over-screen').style.display = 'flex';
+        document.getElementById('final-score').innerText = "СТАТУС: УВОЛЕН С ПОЗОРОМ";
+    }, 2000);
+}
+
+function launchMissile(targetEl, moveInt) {
+    const canvas = document.getElementById('pvo-container');
+    const missile = document.createElement('div');
+    missile.className = 'pvo-missile';
+    launchSnd.currentTime = 0; launchSnd.play().catch(()=>{});
+    
+    const startX = Math.random() * canvas.offsetWidth;
+    const startY = canvas.offsetHeight;
+    missile.style.left = startX + 'px'; missile.style.top = startY + 'px';
+    canvas.appendChild(missile);
+    
+    const tx = parseInt(targetEl.style.left) + (targetEl.classList.contains('pvo-boss')?40:22);
+    const ty = parseInt(targetEl.style.top) + (targetEl.classList.contains('pvo-boss')?40:22);
+    
+    const angle = Math.atan2(ty - startY, tx - startX) * 180 / Math.PI;
+    missile.style.transform = `rotate(${angle + 90}deg)`;
+    
+    setTimeout(() => { missile.style.left = tx + 'px'; missile.style.top = ty + 'px'; }, 10);
+    
+    setTimeout(() => {
+        missile.remove(); if(!gameActive) return;
+        let hp = parseInt(targetEl.dataset.hp) - 1;
+        targetEl.dataset.hp = hp;
+        boomSnd.currentTime = 0; boomSnd.play().catch(()=>{});
+        
+        if(hp <= 0) {
+            score += targetEl.classList.contains('pvo-boss') ? 5 : 1;
+            if(score > 0 && score % 10 === 0) { 
+                level++; 
+                startSpawning(); 
+                typeMsg("ШТАБ: Новая волна! Противник наращивает силы!"); 
+            }
+            document.getElementById('pvo-info-val').innerHTML = `СБИТО: ${String(score).padStart(3, '0')}<br>LVL: ${level}`;
+            targetEl.style.backgroundImage = 'none'; targetEl.innerHTML = '<span style="font-size:40px;">💥</span>';
+            clearInterval(moveInt); 
+            setTimeout(() => targetEl.remove(), 200);
+        } else {
+            targetEl.style.filter = "brightness(3) drop-shadow(0 0 10px #f00)";
+            setTimeout(() => targetEl.style.filter = "drop-shadow(0 0 5px #0f0)", 100);
+        }
+    }, 190);
+}
+
+function endGame() {
+    gameActive = false; 
+    clearInterval(spawnInterval); 
+    clearInterval(musicInterval);
+    radarSnd.pause(); 
+    actionSnd.pause(); 
+    sirenSnd.play().catch(()=>{});
+    document.getElementById('final-score').innerText = `ИТОГ: ${score}`;
+    document.getElementById('pvo-over-screen').style.display = 'flex';
+    typeMsg("РАДАР ПФО: Сектор потерян. Связь оборвана.");
+}
+</script>
+
+
+</body>
+</html>
